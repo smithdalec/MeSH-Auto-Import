@@ -1,0 +1,5 @@
+name = MeSH Add
+description = Adds MeSH terms upon node import
+core = 7.x
+dependencies[] = taxonomy
+configure = admin/config/content/mesh-add
