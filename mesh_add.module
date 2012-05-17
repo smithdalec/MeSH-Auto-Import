@@ -30,6 +30,22 @@ function mesh_add_permission() {
  * @return string 
  */
 function mesh_add_dev() {
+  $pmid = '100';
+  $url = 'http://www.ncbi.nlm.nih.gov/pubmed/'.$pmid.'?report=xml';
+  
+  $response = drupal_http_request($url);
+  if ($response->code == '200') {
+    $html_xml = file_get_contents($url);
+  }
+  else {
+    drupal_set_message('Unable to retrieve a document from NIH with a PubMed ID 
+      of ' . $pmid . '.', 'error');
+    if (isset($response->code) && isset($response->error)) {
+    drupal_set_message('Response code from NIH: ' . $response->code . ' ' . 
+      $response->error, 'error');
+    }
+  }
+  
   
   return '';
 }
