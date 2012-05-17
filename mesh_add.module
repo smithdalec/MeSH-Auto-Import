@@ -30,22 +30,82 @@ function mesh_add_permission() {
  * @return string 
  */
 function mesh_add_dev() {
-  $pmid = '100';
+}
+
+/**
+ * Implements hook_node_presave().
+ */
+function mesh_add_node_presave($node) {
+  // PubMed ID
+  $pmid = field_get_items('node', $node, 'field_pmid');
+  $pmid = $pmid[0]['value'];
+  $pmid = preg_replace('/ /', '', $pmid);
+  // NIH URL to retrieve XML docs
   $url = 'http://www.ncbi.nlm.nih.gov/pubmed/'.$pmid.'?report=xml';
+  // Taxonomy Vocabulary ID
+  $vid = 7;
+  // Names of fields that will be used
+  $term_reference_field = 'field_mesh';
+  $pmid_field = 'field_pmid';
   
   $response = drupal_http_request($url);
-  if ($response->code == '200') {
-    $html_xml = file_get_contents($url);
-  }
-  else {
+  if ($response->code != '200') {
     drupal_set_message('Unable to retrieve a document from NIH with a PubMed ID 
       of ' . $pmid . '.', 'error');
     if (isset($response->code) && isset($response->error)) {
     drupal_set_message('Response code from NIH: ' . $response->code . ' ' . 
       $response->error, 'error');
     }
+    return;
+  }
+  // Convert the "XML" that NIH gives us to real XML
+  $patterns = array('/&lt;/', '/&gt;/');
+  $replacements = array('<', '>');
+  $response->data = preg_replace($patterns, $replacements, $response->data);
+  
+  $xml = simplexml_load_string($response->data);
+  $heading_objects = $xml->PubmedArticle->MedlineCitation->MeshHeadingList->MeshHeading;
+  foreach ($heading_objects as $heading) {
+    $terms[] = (string)$heading->DescriptorName;
   }
   
+  $terms = mesh_add_tids($terms, $vid);
   
-  return '';
+  $submitted_terms = field_get_items('node', $node, 'field_mesh');
+  $lang = $node->language;
+  if (empty($submitted_terms)) {
+    $delta = 0;
+    foreach($terms as $tid => $term) {
+      $node->{$term_reference_field}[$lang][$delta]['tid'] = $tid;
+      $delta++;
+    }
+  }
+}
+
+/**
+ * Given an array of taxonomy term strings, returns the same array of terms,
+ * but keyed by the taxonomy term's term ID (tid)
+ * @param array $terms Array of taxonomy terms
+ * @param int $vid The ID of the vocabulary from which the terms exist.
+ *  Leave blank to search all taxonomy vocabularies
+ * @return int Array of taxonomy terms, keyed by tid
+ */
+function mesh_add_tids($terms, $vid = FALSE) {
+  foreach ($terms as $term) {
+    $query = db_select('taxonomy_term_data', 'td')
+      ->fields('td', array('tid', 'vid', 'name'))
+      ->condition('name', $term);
+    if ($vid) {
+      $query->condition('vid', $vid);
+    }
+    $result = $query->execute();
+    $i = 0;
+    foreach ($result as $row) {
+      if ($i > 0) continue;
+      $return_terms[$row->tid] = $row->name;
+      $i++;
+    }
+  }
+  
+  return $return_terms;
 }
