@@ -1,4 +1,8 @@
 <?php
+/**
+ * @todo Add admin page with ability to input the pmid field, term reference field, vid and store them as drupal variables
+ *  
+ */
 
 /**
  * Implements hook_node_presave().
@@ -72,6 +76,18 @@ function mesh_add_node_presave($node) {
       $node->{$term_reference_field}[$lang][$delta]['tid'] = $tid;
       $delta++;
     }
+  }
+}
+
+/**
+ * Implements hook_form_alter
+ */
+function mesh_add_form_alter(&$form, &$form_state, &$form_id) {
+  if (isset($form['field_mesh']) && isset($form['field_pmid'])) {
+    $form['field_mesh']['und']['#description'] = t('
+      Leave this field blank to automatically find MeSH terms based on the 
+      PubMed ID
+    ');
   }
 }
 
