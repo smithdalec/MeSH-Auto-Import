@@ -4,11 +4,12 @@
 /**
  * Implements hook_menu(). 
  */
-function mesh_add_menu() {
+function mesh_import_menu() {
   $items['admin/config/content/mesh-auto-import'] = array(
     'title'             => 'MeSH Auto-Import Configuration',
-    'page callback'     => 'mesh_add_admin',
+    'page callback'     => 'mesh_import_admin',
     'access arguments'  => array('administer mesh-auto-import'),
+    'type' => MENU_NORMAL_ITEM,
   );
   
   return $items;
@@ -17,7 +18,7 @@ function mesh_add_menu() {
 /**
  * Implements hook_permission().
  */
-function mesh_add_permission() {
+function mesh_import_permission() {
   return array(
     'administer mesh-auto-import' => array(
       'title' => t('Administer MeSH Auto-Import'),
@@ -29,9 +30,9 @@ function mesh_add_permission() {
 /**
  * Implements hook_help().
  */
-function mesh_add_help($path, $arg) {
+function mesh_import_help($path, $arg) {
   switch ($path) {
-    case 'admin/help/mesh-auto-import':
+    case 'admin/help#mesh_import':
       return t('MeSH Auto-Import lets the user automatically import MeSH subject
         headings when a new node is created. The node must have two fields
         attached: a multivalued term-reference field referencing a taxonomy of 
@@ -43,14 +44,14 @@ function mesh_add_help($path, $arg) {
  * hook_menu() callback for admin/config/content/mesh-auto-import
  * @return string 
  */
-function mesh_add_admin() {
+function mesh_import_admin() {
   
 }
 
 /**
  * Implements hook_node_presave().
  */
-function mesh_add_node_presave($node) {
+function mesh_import_node_presave($node) {
   // Taxonomy Vocabulary ID
   $vid = 7;
   // Names of fields that will be used
@@ -97,7 +98,7 @@ function mesh_add_node_presave($node) {
   }
   
   // Convert sanitized XML string into an XML object
-  $xml = simplexml_load_string(mesh_add_filter_xml($response->data));
+  $xml = simplexml_load_string(mesh_import_filter_xml($response->data));
   
   // Retrieve the MeSH terms from the XML object
   $heading_objects = $xml->PubmedArticle->MedlineCitation->MeshHeadingList->MeshHeading;
@@ -106,7 +107,7 @@ function mesh_add_node_presave($node) {
   }
   
   // Convert standard iterative array keys to Taxonomy term IDs
-  $terms = mesh_add_tids($terms, $vid);
+  $terms = mesh_import_tids($terms, $vid);
   
   // MeSH terms that already exist in the MeSH field (user submitted terms, or
   // we are editing a previously saved node
@@ -125,7 +126,7 @@ function mesh_add_node_presave($node) {
 /**
  * Implements hook_form_alter
  */
-function mesh_add_form_alter(&$form, &$form_state, &$form_id) {
+function mesh_import_form_alter(&$form, &$form_state, &$form_id) {
   if (isset($form['field_mesh']) && isset($form['field_pmid'])) {
     $form['field_mesh']['und']['#description'] = t('
       Leave this field blank to automatically find MeSH terms based on the 
@@ -143,7 +144,7 @@ function mesh_add_form_alter(&$form, &$form_state, &$form_id) {
  *  Leave blank to search all taxonomy vocabularies
  * @return int Array of taxonomy terms, keyed by tid
  */
-function mesh_add_tids($terms, $vid = FALSE) {
+function mesh_import_tids($terms, $vid = FALSE) {
   // Get each MeSH term's Taxonomy term ID
   foreach ($terms as $term) {
     $query = db_select('taxonomy_term_data', 'td')
@@ -172,7 +173,7 @@ function mesh_add_tids($terms, $vid = FALSE) {
  * @param string $xml the raw "xml" string sent from NIH
  * @return string The same string, converted to real XML
  */
-function mesh_add_filter_xml($xml) {
+function mesh_import_filter_xml($xml) {
   $patterns = array('/&lt;/', '/&gt;/');
   $replacements = array('<', '>');
   return preg_replace($patterns, $replacements, $xml);

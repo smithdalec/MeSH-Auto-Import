@@ -1,0 +1,6 @@
+name = MeSH Auto-Import
+description = Automatically adds MeSH headings to a term reference field
+core = 7.x
+dependencies[] = taxonomy
+configure = admin/config/content/mesh-auto-import
+package = Taxonomy
