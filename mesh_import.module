@@ -1,17 +1,14 @@
 <?php
- //@todo Add admin page with ability to input the pmid field, term reference field, vid and store them as drupal variables
-
 /**
  * Implements hook_menu(). 
  */
 function mesh_import_menu() {
   $items['admin/config/content/mesh-auto-import'] = array(
     'title'             => 'MeSH Auto-Import Configuration',
+    'description'       => 'Configure the fields to use with MeSH Auto-Import',
     'page callback'     => 'mesh_import_admin',
     'access arguments'  => array('administer mesh-auto-import'),
-    'type' => MENU_NORMAL_ITEM,
   );
-  
   return $items;
 }
 
@@ -45,18 +42,99 @@ function mesh_import_help($path, $arg) {
  * @return string 
  */
 function mesh_import_admin() {
+  return drupal_get_form('mesh_import_admin_form');
+}
+
+/**
+ * Form callback function 
+ */
+function mesh_import_admin_form($form, &$form_state) {
+  $settings = mesh_import_get_settings();
   
+  // Build a list of existing fields to use as options for the select lists
+  foreach (field_info_fields() as $field => $info) {
+    if (isset($info['field_name'])) {
+      if ($info['type'] == 'number_integer') {
+        $int_fields[$info['field_name']] = $info['field_name'];
+      }
+      elseif ($info['type'] == 'taxonomy_term_reference') {
+        $ref_fields[$info['field_name']] = $info['field_name'];
+      }
+    }
+  }
+  
+  $vocabulary_objects = taxonomy_get_vocabularies();
+  foreach ($vocabulary_objects as $vid => $vocabulary) {
+    $vocabularies[$vid] = $vocabulary->name;
+  }
+  $form['pmid'] = array(
+    '#type' => 'select',
+    '#title' => t('PubMed ID field'),
+    '#default_value' => $settings['pmid'],
+    '#options' => $int_fields,
+    '#description' => t('Integer field that stores the PubMed ID for
+      a document.'),
+  );
+  $form['term_reference'] = array(
+    '#type' => 'select',
+    '#title' => t('MeSH term reference field'),
+    '#default_value' => $settings['term_ref'],
+    '#options' => $ref_fields,
+    '#description' => t('Taxonomy term reference field which references a
+      Vocabulary of MeSH terms.'),
+  );
+  $form['mesh_vocabulary'] = array(
+    '#type' => 'select',
+    '#title' => t('MeSH terms vocabulary'),
+    '#default_value' => $settings['vocabulary'],
+    '#options' => $vocabularies,
+    '#description' => t('Taxonomy vocabulary that contains MeSH terms'),
+  );
+    $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+  
+  return $form;
+}
+
+/**
+ * Get the admin settings as set by the user using drupal's variable system.
+ * 
+ * @return array An associative array of variables and their values
+ */
+function mesh_import_get_settings() {
+  $settings['pmid'] = variable_get('mesh_import_pmid');
+  $settings['term_ref'] = variable_get('mesh_import_term_ref');
+  $settings['vocabulary'] = variable_get('mesh_import_vocabulary');
+  $settings['settings_saved'] = variable_get('mesh_import_settings_saved');
+  
+  return $settings;
+}
+
+/**
+ * Form submission callback for mesh_import_admin_form
+ *
+ * @param type $form
+ * @param type $form_state 
+ */
+function mesh_import_admin_form_submit($form, &$form_state) {
+  variable_set('mesh_import_pmid', $form_state['values']['pmid']);
+  variable_set('mesh_import_term_ref', $form_state['values']['term_reference']);
+  variable_set('mesh_import_vocabulary', $form_state['values']['mesh_vocabulary']);
+  variable_set('mesh_import_settings_saved', TRUE);
+  
+  drupal_set_message(t('Settings have been saved.'));
 }
 
 /**
  * Implements hook_node_presave().
  */
 function mesh_import_node_presave($node) {
-  // Taxonomy Vocabulary ID
-  $vid = 7;
-  // Names of fields that will be used
-  $term_reference_field = 'field_mesh';
-  $pmid_field = 'field_pmid';
+  // Array of settings defined by the user, including the names of fields to
+  // store the PubMed ID, MeSH taxonomy term reference, and MeSH vocabulary ID.
+  
+  $settings = mesh_import_get_settings();
   
   // Fetch the Pubmed ID from the associated Drupal Field from the node object
   $pmid = field_get_items('node', $node, 'field_pmid');
@@ -67,14 +145,13 @@ function mesh_import_node_presave($node) {
   
   // Get a list of all field instances for this node type
   $instances = field_info_instances('node', $node->type);
-  $mesh_field_exists = (isset($instances[$term_reference_field]))? TRUE : FALSE;
-  $pmid_field_exists = (isset($instances[$pmid_field]))? TRUE : FALSE;
-  if ($mesh_field_exists === FALSE || $pmid_field === FALSE) {
+  $mesh_field_exists = (isset($instances[$settings['term_ref']]))? TRUE : FALSE;
+  $pmid_field_exists = (isset($instances[$settings['pmid']]))? TRUE : FALSE;
+  if ($mesh_field_exists === FALSE || $settings['pmid'] === FALSE) {
     // We only want to take the time to talk to NIH if this is a node that has
-    // the required pmid/mesh fields
+    // the required pmid/mesh fields, and admin settings have been set
     return;
   }
-  
   // NIH URL to retrieve XML docs
   $url = 'http://www.ncbi.nlm.nih.gov/pubmed/' . $pmid . '?report=xml';
   $response = drupal_http_request($url);
@@ -89,7 +166,7 @@ function mesh_import_node_presave($node) {
   // Make sure we get a 200 "OK" response
   if ($response->code != '200') {
     drupal_set_message('Unable to retrieve a document from NIH with a PubMed ID 
-      of ' . $pmid . '.', 'error');
+      of ' . $pmid . '. No MeSH terms were added to this node.', 'error');
     if (isset($response->error)) {
       drupal_set_message('Response code from NIH: ' . $response->code . ' ' . 
         $response->error, 'error');
@@ -107,7 +184,7 @@ function mesh_import_node_presave($node) {
   }
   
   // Convert standard iterative array keys to Taxonomy term IDs
-  $terms = mesh_import_tids($terms, $vid);
+  $terms = mesh_import_tids($terms, $settings['vocabulary']);
   
   // MeSH terms that already exist in the MeSH field (user submitted terms, or
   // we are editing a previously saved node
@@ -117,7 +194,7 @@ function mesh_import_node_presave($node) {
     $delta = 0;
     // Add the list of retrieved MeSH terms to the (multivalued) mesh field
     foreach($terms as $tid => $term) {
-      $node->{$term_reference_field}[$lang][$delta]['tid'] = $tid;
+      $node->{$settings['term_ref']}[$lang][$delta]['tid'] = $tid;
       $delta++;
     }
   }
