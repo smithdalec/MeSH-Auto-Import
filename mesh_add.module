@@ -1,8 +1,51 @@
 <?php
+ //@todo Add admin page with ability to input the pmid field, term reference field, vid and store them as drupal variables
+
 /**
- * @todo Add admin page with ability to input the pmid field, term reference field, vid and store them as drupal variables
- *  
+ * Implements hook_menu(). 
  */
+function mesh_add_menu() {
+  $items['admin/config/content/mesh-auto-import'] = array(
+    'title'             => 'MeSH Auto-Import Configuration',
+    'page callback'     => 'mesh_add_admin',
+    'access arguments'  => array('administer mesh-auto-import'),
+  );
+  
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function mesh_add_permission() {
+  return array(
+    'administer mesh-auto-import' => array(
+      'title' => t('Administer MeSH Auto-Import'),
+      'description' => t('Allows user to access MeSH Auto-Import administration page'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_help().
+ */
+function mesh_add_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help/mesh-auto-import':
+      return t('MeSH Auto-Import lets the user automatically import MeSH subject
+        headings when a new node is created. The node must have two fields
+        attached: a multivalued term-reference field referencing a taxonomy of 
+        MeSH headings, and a text field for storing the PubMed ID.');
+  }
+}
+
+/**
+ * hook_menu() callback for admin/config/content/mesh-auto-import
+ * @return string 
+ */
+function mesh_add_admin() {
+  
+}
 
 /**
  * Implements hook_node_presave().
